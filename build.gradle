@@ -1,0 +1,75 @@
+plugins {
+    id 'idea'
+    id 'java'
+    id 'application'
+    id 'maven-publish'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'dev.qilletni.qpm.cli'
+version = '1.0.0-SNAPSHOT'
+
+sourceCompatibility = JavaVersion.VERSION_22
+targetCompatibility = JavaVersion.VERSION_22
+
+application {
+    mainClass = 'dev.qilletni.qpm.cli.QilletniPackageManagerApplication'
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    implementation 'info.picocli:picocli:4.7.5'
+    annotationProcessor 'info.picocli:picocli-codegen:4.7.5'
+
+    // Configs
+    implementation 'org.yaml:snakeyaml:2.2'
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // SLF4J API dependency
+    implementation 'org.apache.logging.log4j:log4j-api:2.22.1'
+    implementation 'org.apache.logging.log4j:log4j-core:2.22.1'
+    implementation 'org.apache.logging.log4j:log4j-slf4j-impl:2.22.1'
+
+    implementation 'dev.qilletni.api:qilletni-api:1.0.0-SNAPSHOT'
+    implementation 'dev.qilletni.pkgutil:qilletni-pkgutil:1.0.0-SNAPSHOT'
+}
+
+idea {
+    module {
+        downloadJavadoc = true // defaults to false
+        downloadSources = true
+    }
+}
+
+
+shadowJar {
+    manifest {
+        attributes(
+                'Multi-Release': 'true'
+        )
+    }
+
+    archiveClassifier.set('')
+
+    archiveFileName.set('QPM.jar')
+
+    doLast {
+        def outputDir = file("$projectDir/scripts")
+        copy {
+            from archiveFile
+            into outputDir
+        }
+    }
+}
+
+test {
+    useJUnitPlatform()
+}
