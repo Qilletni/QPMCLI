@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+# Resolve the absolute path of the QilletniToolchain JAR
+JAR_PATH="$(dirname "$(readlink -f "$0")")/QPM.jar"
+
+# Arrays to hold -D options (Java system properties) and other arguments
+java_opts=()
+other_args=()
+debug_mode=false
+
+# Iterate over all passed arguments
+for arg in "$@"; do
+  # If argument starts with -D, it's a Java system property
+  if [[ "$arg" == "-DEBUG" ]]; then
+      debug_mode=true
+  elif [[ "$arg" == -D* ]]; then
+    java_opts+=("$arg")
+  else
+    other_args+=("$arg")
+  fi
+done
+
+# Add debug options if -DEBUG flag is present
+if [ "$debug_mode" = true ]; then
+  java_opts+=("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005")
+fi
+
+# Construct and run the java command
+# First, any -D options, then -jar, then the jar path, finally other args
+GITHUB_CLIENT_ID=Iv23lipeuZ8BUBcWByRi java "${java_opts[@]}" -jar "$JAR_PATH" "${other_args[@]}"
