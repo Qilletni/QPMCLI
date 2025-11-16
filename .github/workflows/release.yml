@@ -1,0 +1,72 @@
+name: Build, Release and Publish QPM
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write # Needed for GitHub Releases
+  packages: write # Needed for pushing Docker images to GHCR
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '22'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build Project
+        run: ./gradlew clean shadowJar
+        env:
+          PACKAGE_PAT: ${{ secrets.PACKAGE_PAT }}
+
+      - name: Get Gradle Version
+        id: get_version
+        run: |
+          VERSION=$(./gradlew -q printVersion)
+          echo "Gradle version is: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set Release Variables
+        id: set_release
+        shell: bash
+        run: |
+          # but we keep it for the GH Release artifact tagging/prerelease flag
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            echo "Detected push event – creating pre-release."
+            # Use a different tag scheme for push if needed, e.g., including commit SHA or run number
+            RELEASE_TAG="v${{ steps.get_version.outputs.version }}-${{ github.sha }}"
+            PRERELEASE="true"
+          else # workflow_dispatch
+            echo "Detected manual trigger – creating official release."
+            RELEASE_TAG="v${{ steps.get_version.outputs.version }}"
+            PRERELEASE="false"
+          fi
+          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "PRERELEASE=$PRERELEASE" >> $GITHUB_OUTPUT
+
+      - name: Package Release Asset
+        run: |
+          tar -czvf qpm-${{ steps.get_version.outputs.version }}.tar.gz \
+            build/libs/QPM.jar \
+            scripts/qpm.bat \
+            scripts/qpm
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ steps.set_release.outputs.PRERELEASE }}
+          tag_name: ${{ steps.set_release.outputs.RELEASE_TAG }}
+          generate_release_notes: true
+          files: |
+            qpm-${{ steps.get_version.outputs.version }}.tar.gz
+            build/libs/QPM.jar
