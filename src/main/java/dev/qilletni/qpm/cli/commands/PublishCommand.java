@@ -9,6 +9,7 @@ import dev.qilletni.pkgutil.adapters.ComparableVersionTypeAdapter;
 import dev.qilletni.pkgutil.adapters.VersionTypeAdapter;
 import dev.qilletni.qpm.cli.auth.AuthManager;
 import dev.qilletni.qpm.cli.exceptions.AuthenticationException;
+import dev.qilletni.qpm.cli.exceptions.RegistryException;
 import dev.qilletni.qpm.cli.integrity.IntegrityVerifier;
 import dev.qilletni.qpm.cli.models.UploadResponse;
 import dev.qilletni.qpm.cli.registry.RegistryClient;
@@ -28,6 +29,8 @@ import java.util.zip.ZipFile;
 
 /**
  * Publish command - uploads a .qll package to the registry.
+ * Supports publishing to personal namespaces (username/package) and
+ * organization namespaces (orgname/package) if you are an admin.
  */
 @Command(
     name = "publish",
@@ -74,14 +77,7 @@ public class PublishCommand implements Callable<Integer> {
                 return 1;
             }
 
-            ProgressDisplay.info("Package: " + qllInfo.name() + " v" + qllInfo.version());
-
-//             Step 4: Validate package name format
-            if (!qllInfo.name().matches("^[a-zA-Z0-9-]+/[a-zA-Z0-9-]+$")) {
-                ProgressDisplay.error("Invalid package name format: " + qllInfo.name());
-                ProgressDisplay.error("Expected format: username/package-name");
-                return 1;
-            }
+            ProgressDisplay.info("Package: " + qllInfo.scope() + "/" + qllInfo.name() + " v" + qllInfo.version().getVersionString());
 
             // Step 5: Compute integrity
             // TODO: Do something with this, check it?
@@ -109,6 +105,25 @@ public class PublishCommand implements Callable<Integer> {
         } catch (AuthenticationException e) {
             ProgressDisplay.error(e.getMessage());
             return 1;
+        } catch (RegistryException e) {
+            // Handle organization-specific errors
+            if ("insufficient_permissions".equals(e.getErrorCode())) {
+                ProgressDisplay.error("Cannot verify organization membership.");
+                ProgressDisplay.error("");
+                ProgressDisplay.error("The 'read:org' permission is required to publish to organization namespaces.");
+                ProgressDisplay.error("Please re-authenticate: qpm login");
+                return 1;
+            } else if ("forbidden".equals(e.getErrorCode())) {
+                // Display the detailed error message from the server
+                // which includes org admin requirements and GitHub links
+                ProgressDisplay.error("Failed to publish package:");
+                ProgressDisplay.error(e.getMessage());
+                return 1;
+            } else {
+                // Generic registry error
+                ProgressDisplay.error("Failed to publish package: " + e.getMessage());
+                return 1;
+            }
         } catch (Exception e) {
             ProgressDisplay.error("Failed to publish package: " + e.getMessage());
             e.printStackTrace();

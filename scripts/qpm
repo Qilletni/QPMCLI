@@ -27,4 +27,4 @@ fi
 
 # Construct and run the java command
 # First, any -D options, then -jar, then the jar path, finally other args
-GITHUB_CLIENT_ID=Iv23lipeuZ8BUBcWByRi java "${java_opts[@]}" -jar "$JAR_PATH" "${other_args[@]}"
+GITHUB_CLIENT_ID=Ov23liqlRiwOO2Ld3qec java "${java_opts[@]}" -jar "$JAR_PATH" "${other_args[@]}"

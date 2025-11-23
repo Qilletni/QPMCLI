@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Represents and parses a manifest.dsl file.
+ * Represents and parses a simplified qilletni_info.yml file.
  * Format:
  * name: @username/package
  * version: 1.0.0
@@ -27,9 +27,9 @@ public record Manifest(String name, String version, List<DependencySpec> depende
     }
 
     /**
-     * Parses a manifest.dsl file from the given path.
+     * Parses a qilletni_info.yml file from the given path.
      *
-     * @param manifestPath the path to the manifest.dsl file
+     * @param manifestPath the path to the qilletni_info.yml file
      * @return the parsed Manifest
      * @throws IOException if there's an error reading the file
      */
@@ -77,31 +77,5 @@ public record Manifest(String name, String version, List<DependencySpec> depende
         }
 
         return new Manifest(name, version, dependencies);
-    }
-
-    /**
-     * Writes the manifest to a file.
-     *
-     * @param manifestPath the path where to write the manifest
-     * @throws IOException if there's an error writing the file
-     */
-    public void write(Path manifestPath) throws IOException {
-        StringBuilder content = new StringBuilder();
-        content.append("name: ").append(name).append("\n");
-        content.append("version: ").append(version).append("\n");
-
-        if (!dependencies.isEmpty()) {
-            content.append("dependencies:\n");
-            for (DependencySpec dep : dependencies) {
-                // Write in new format: package_name: version (without @ prefix)
-                String packageName = dep.packageName();
-                if (packageName.startsWith("@")) {
-                    packageName = packageName.substring(1);
-                }
-                content.append("  ").append(packageName).append(": ").append(dep.versionConstraint()).append("\n");
-            }
-        }
-
-        Files.writeString(manifestPath, content.toString());
     }
 }

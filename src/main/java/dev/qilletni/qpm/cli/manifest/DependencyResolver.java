@@ -1,5 +1,7 @@
 package dev.qilletni.qpm.cli.manifest;
 
+import dev.qilletni.pkgutil.manifest.LockFile;
+import dev.qilletni.pkgutil.manifest.models.ResolvedPackage;
 import dev.qilletni.qpm.cli.exceptions.RegistryException;
 import dev.qilletni.qpm.cli.exceptions.ResolutionException;
 import dev.qilletni.qpm.cli.models.*;

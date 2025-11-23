@@ -13,10 +13,11 @@ import java.util.concurrent.Callable;
 
 /**
  * Login command - authenticates the user via GitHub OAuth device flow.
+ * Requests 'read:user' and 'read:org' scopes for organization support.
  */
 @Command(
     name = "login",
-    description = "Authenticate with GitHub via OAuth device flow"
+    description = "Authenticate with GitHub (includes organization permissions)"
 )
 public class LoginCommand implements Callable<Integer> {
 

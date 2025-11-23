@@ -81,7 +81,6 @@ public class RegistryClient {
             .timeout(DOWNLOAD_TIMEOUT)
             .header("Authorization", "Bearer " + token)
             .header("Content-Type", "application/gzip")
-//            .header("Content-Length", String.valueOf(fileBytes.length))
             .header("User-Agent", "qpm/1.0.0")
             .POST(HttpRequest.BodyPublishers.ofByteArray(fileBytes))
             .build();
@@ -90,7 +89,6 @@ public class RegistryClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 201) {
-                System.out.println(response.body());
                 return gson.fromJson(response.body(), UploadResponse.class);
             } else {
                 handleErrorResponse(response);
@@ -310,7 +308,6 @@ public class RegistryClient {
     public DeleteResponse deletePackageVersion(String scope, String name, String version, String token) throws RegistryException {
 
         String url = String.format("%s/packages/%s/%s/%s", registryUrl, scope, name, version);
-        System.out.println("url = " + url);
 
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(url))
@@ -368,7 +365,6 @@ public class RegistryClient {
      */
     public DeviceCodeResponse requestDeviceCode() throws RegistryException {
         String url = registryUrl + "/auth/device/code";
-        System.out.println("url = " + url);
 
         String requestBody = gson.toJson(Map.of("scope", "read:user read:org"));
 
@@ -401,16 +397,11 @@ public class RegistryClient {
      * Handles error responses from the API.
      *
      * @param response the HTTP response
-     * @throws RegistryException with appropriate error message
+     * @throws RegistryException with appropriate error message and error code
      */
     private void handleErrorResponse(HttpResponse<String> response) throws RegistryException {
-        try {
-            ErrorResponse errorResponse = gson.fromJson(response.body(), ErrorResponse.class);
-            throw new RegistryException(errorResponse.message(), response.statusCode());
-        } catch (Exception e) {
-            // If we can't parse the error response, throw generic error
-            logger.warn("Failed to parse error response: {}", response.body());
-        }
+        ErrorResponse errorResponse = gson.fromJson(response.body(), ErrorResponse.class);
+        throw new RegistryException(errorResponse.message(), response.statusCode(), errorResponse.error());
     }
 
     public record PackageName(String scope, String name) {}

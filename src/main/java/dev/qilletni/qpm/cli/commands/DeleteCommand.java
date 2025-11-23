@@ -2,6 +2,7 @@ package dev.qilletni.qpm.cli.commands;
 
 import dev.qilletni.qpm.cli.auth.AuthManager;
 import dev.qilletni.qpm.cli.exceptions.AuthenticationException;
+import dev.qilletni.qpm.cli.exceptions.RegistryException;
 import dev.qilletni.qpm.cli.models.DeleteResponse;
 import dev.qilletni.qpm.cli.registry.RegistryClient;
 import dev.qilletni.qpm.cli.utils.ColorSupport;
@@ -91,6 +92,25 @@ public class DeleteCommand implements Callable<Integer> {
         } catch (AuthenticationException e) {
             ProgressDisplay.error("Authentication required. Please run 'qpm login' first.");
             return 1;
+        } catch (RegistryException e) {
+            // Handle organization-specific errors
+            if ("insufficient_permissions".equals(e.getErrorCode())) {
+                ProgressDisplay.error("Cannot verify organization membership.");
+                ProgressDisplay.error("");
+                ProgressDisplay.error("The 'read:org' permission is required to delete organization packages.");
+                ProgressDisplay.error("Please re-authenticate: qpm login");
+                return 1;
+            } else if ("forbidden".equals(e.getErrorCode())) {
+                // Display the detailed error message from the server
+                // which includes org admin requirements and GitHub links
+                ProgressDisplay.error("Failed to delete package:");
+                ProgressDisplay.error(e.getMessage());
+                return 1;
+            } else {
+                // Generic registry error
+                ProgressDisplay.error("Failed to delete package: " + e.getMessage());
+                return 1;
+            }
         } catch (Exception e) {
             ProgressDisplay.error("Failed to delete package: " + e.getMessage());
             return 1;

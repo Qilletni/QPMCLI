@@ -1,11 +1,11 @@
 package dev.qilletni.qpm.cli.commands;
 
+import dev.qilletni.pkgutil.manifest.LockFile;
+import dev.qilletni.pkgutil.manifest.models.ResolvedPackage;
 import dev.qilletni.qpm.cli.config.ConfigManager;
 import dev.qilletni.qpm.cli.integrity.IntegrityVerifier;
 import dev.qilletni.qpm.cli.manifest.DependencyResolver;
-import dev.qilletni.qpm.cli.manifest.LockFile;
 import dev.qilletni.qpm.cli.manifest.Manifest;
-import dev.qilletni.qpm.cli.models.ResolvedPackage;
 import dev.qilletni.qpm.cli.registry.RegistryClient;
 import dev.qilletni.qpm.cli.utils.ProgressDisplay;
 import picocli.CommandLine.Command;
@@ -116,7 +116,7 @@ public class InstallCommand implements Callable<Integer> {
 
             // Build package path
             Path packagesDir = ConfigManager.getPackagesDir();
-            Path packageDir = packagesDir.resolve("@" + scope).resolve(name);
+            Path packageDir = packagesDir.resolve(scope).resolve(name);
             Files.createDirectories(packageDir);
 
             Path packagePath = packageDir.resolve(pkg.version() + ".qll");

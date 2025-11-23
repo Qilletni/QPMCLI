@@ -1,10 +1,10 @@
 package dev.qilletni.qpm.cli.commands;
 
+import dev.qilletni.pkgutil.manifest.LockFile;
+import dev.qilletni.pkgutil.manifest.models.ResolvedPackage;
 import dev.qilletni.qpm.cli.config.ConfigManager;
 import dev.qilletni.qpm.cli.exceptions.IntegrityException;
 import dev.qilletni.qpm.cli.integrity.IntegrityVerifier;
-import dev.qilletni.qpm.cli.manifest.LockFile;
-import dev.qilletni.qpm.cli.models.ResolvedPackage;
 import dev.qilletni.qpm.cli.utils.ProgressDisplay;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
