@@ -77,3 +77,9 @@ shadowJar {
 test {
     useJUnitPlatform()
 }
+
+task printVersion {
+    doLast {
+        println project.version
+    }
+}
