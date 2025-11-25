@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - workflows
 
 permissions:
   contents: write
@@ -125,7 +124,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: snapshot
-          name: Snapshot (${{ needs.check-version.outputs.version }})
+          name: ${{ needs.check-version.outputs.version }}
           prerelease: true
           body_path: RELEASE_NOTES.md
           files: |
