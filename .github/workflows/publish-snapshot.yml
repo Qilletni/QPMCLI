@@ -61,6 +61,7 @@ jobs:
       - name: Create snapshot release
         run: |
           gh release create "${{ steps.get_version.outputs.version }}" \
+            --prerelease \
             --notes-file RELEASE_NOTES.md \
             qpm-${{ steps.get_version.outputs.version }}.tar.gz \
             build/libs/QPM.jar
