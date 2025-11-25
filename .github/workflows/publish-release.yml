@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
+  publish-release:
     runs-on: ubuntu-latest
     if: github.repository == 'Qilletni/QPMCLI'
     steps:
@@ -67,7 +67,7 @@ jobs:
 
       - name: Create final release
         run: |
-          gh release create "${{ github.ref_name }}" \
+          gh release create "${{ steps.get_version.outputs.version }}" \
             --notes-file RELEASE_NOTES.md \
             qpm-${{ steps.get_version.outputs.version }}.tar.gz \
             build/libs/QPM.jar

@@ -40,7 +40,7 @@ jobs:
           fi
 
           echo "Confirmed SNAPSHOT version: $GRADLE_VERSION"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$GRADLE_VERSION" >> $GITHUB_OUTPUT
 
       - name: Package Release Asset
         run: |
