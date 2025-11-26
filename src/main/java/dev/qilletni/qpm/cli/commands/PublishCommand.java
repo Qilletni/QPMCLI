@@ -62,11 +62,8 @@ public class PublishCommand implements Callable<Integer> {
                 Path manifestPath = Paths.get("qilletni_info.yml");
                 var qilletniSrc = Paths.get("qilletni-src");
 
-                System.out.println("manifestPath = " + manifestPath.toAbsolutePath());
-
                 if (!Files.exists(manifestPath) && Files.exists(qilletniSrc)) {
                     manifestPath = qilletniSrc.resolve(manifestPath);
-                    System.out.println("fallback to: " + manifestPath.toAbsolutePath());
                 }
 
                 if (!Files.exists(manifestPath)) {
