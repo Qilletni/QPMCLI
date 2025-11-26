@@ -11,6 +11,7 @@ import dev.qilletni.qpm.cli.auth.AuthManager;
 import dev.qilletni.qpm.cli.exceptions.AuthenticationException;
 import dev.qilletni.qpm.cli.exceptions.RegistryException;
 import dev.qilletni.qpm.cli.integrity.IntegrityVerifier;
+import dev.qilletni.qpm.cli.manifest.Manifest;
 import dev.qilletni.qpm.cli.models.UploadResponse;
 import dev.qilletni.qpm.cli.registry.RegistryClient;
 import dev.qilletni.qpm.cli.utils.ProgressDisplay;
@@ -38,7 +39,7 @@ import java.util.zip.ZipFile;
 )
 public class PublishCommand implements Callable<Integer> {
 
-    @Parameters(index = "0", description = "Path to the .qll package file")
+    @Parameters(index = "0", defaultValue = ".", description = "Path to the .qll package file")
     private String packageFile;
 
     @Option(names = {"-h", "--help"}, usageHelp = true, description = "Display help message")
@@ -56,16 +57,45 @@ public class PublishCommand implements Callable<Integer> {
             AuthManager.requireAuthentication();
             String token = AuthManager.getToken();
 
-            // Step 2: Validate package file
-            Path packagePath = Paths.get(packageFile);
-            if (!Files.exists(packagePath)) {
-                ProgressDisplay.error("Package file not found: " + packageFile);
-                return 1;
-            }
+            Path packagePath;
+            if (packageFile.equals(".")) {
+                Path manifestPath = Paths.get("qilletni_info.yml");
+                var qilletniSrc = Paths.get("qilletni-src");
 
-            if (!packageFile.endsWith(".qll")) {
-                ProgressDisplay.error("Package file must have .qll extension");
-                return 1;
+                System.out.println("manifestPath = " + manifestPath.toAbsolutePath());
+
+                if (!Files.exists(manifestPath) && Files.exists(qilletniSrc)) {
+                    manifestPath = qilletniSrc.resolve(manifestPath);
+                    System.out.println("fallback to: " + manifestPath.toAbsolutePath());
+                }
+
+                if (!Files.exists(manifestPath)) {
+                    ProgressDisplay.error("Unable to find qilletni_info.yml to identify output file. Try specifying an exact path, or running this in a project root.");
+                    return 1;
+                }
+
+                var manifest = Manifest.parse(manifestPath);
+
+                // Remove scope from name
+                var packageParts = manifest.name().split("/");
+                var packageName = packageParts[packageParts.length - 1];
+                packagePath = Paths.get("build", "ql-build", "%s-%s.qll".formatted(packageName,  manifest.version()));
+
+                if (!Files.exists(packagePath)) {
+                    ProgressDisplay.error("Can't find expected latest build at: %s".formatted(packagePath.toAbsolutePath()));
+                    return 1;
+                }
+            } else {
+                packagePath = Paths.get(packageFile);
+                if (!Files.exists(packagePath)) {
+                    ProgressDisplay.error("Package file not found: %s".formatted(packageFile));
+                    return 1;
+                }
+
+                if (!packageFile.endsWith(".qll")) {
+                    ProgressDisplay.error("Package file must have .qll extension");
+                    return 1;
+                }
             }
 
             ProgressDisplay.info("Reading package: " + packageFile);

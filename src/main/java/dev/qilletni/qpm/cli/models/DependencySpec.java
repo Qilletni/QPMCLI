@@ -5,7 +5,7 @@ import java.util.regex.Pattern;
 
 /**
  * Represents a dependency specification.
- * In manifest.dsl, dependencies are specified as a map:
+ * In qilletni_info.yml, dependencies are specified as a map:
  *   dependencies:
  *     alice/postgres: ^1.0.0
  *     bob/utils: 1.0.0
