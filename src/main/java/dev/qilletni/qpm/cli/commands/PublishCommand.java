@@ -104,6 +104,11 @@ public class PublishCommand implements Callable<Integer> {
                 return 1;
             }
 
+            if (qllInfo.scope() == null || qllInfo.scope().isEmpty()) {
+                ProgressDisplay.error("Package does not contain a scope.");
+                return 1;
+            }
+
             ProgressDisplay.info("Package: " + qllInfo.scope() + "/" + qllInfo.name() + " v" + qllInfo.version().getVersionString());
 
             // Step 5: Compute integrity
