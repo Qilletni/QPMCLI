@@ -13,23 +13,51 @@ public class AuthManager {
 
     /**
      * Checks if the user is authenticated (has a valid token).
+     * Checks environment variables (QPM_TOKEN, GITHUB_TOKEN) before config file.
      *
      * @return true if authenticated, false otherwise
      */
     public static boolean isAuthenticated() {
+        // Check environment variables first
+        String envToken = System.getenv("QPM_TOKEN");
+        if (envToken == null || envToken.isEmpty()) {
+            envToken = System.getenv("GITHUB_TOKEN");
+        }
+
+        if (envToken != null && !envToken.isEmpty()) {
+            return true;
+        }
+
+        // Fall back to config file
         return ConfigManager.hasToken();
     }
 
     /**
      * Gets the current authentication token.
+     * Checks environment variables (QPM_TOKEN, GITHUB_TOKEN) before config file.
      *
      * @return the token
      * @throws AuthenticationException if not authenticated
      */
     public static String getToken() throws AuthenticationException {
+        String envToken = System.getenv("QPM_TOKEN");
+        if (envToken == null || envToken.isEmpty()) {
+            envToken = System.getenv("GITHUB_TOKEN");
+        }
+
+        if (envToken != null && !envToken.isEmpty()) {
+            return envToken;
+        }
+
+        // Priority 2: Fall back to stored token (for interactive usage)
         String token = ConfigManager.getToken();
         if (token == null || token.isEmpty()) {
-            throw new AuthenticationException("Not authenticated. Please run 'qpm login' first.");
+            throw new AuthenticationException(
+                    """
+                    Not authenticated. Please either:
+                      - Run 'qpm login' for interactive authentication, or
+                      - Set QPM_TOKEN or GITHUB_TOKEN environment variable for CI/CD usage"""
+            );
         }
         return token;
     }
