@@ -40,7 +40,7 @@ public class InstallCommand implements Callable<Integer> {
         try {
             Path manifestPath = Paths.get("qilletni_info.yml");
             Path lockFilePath = Paths.get("qilletni.lock");
-            var qilletniSrc = Paths.get("qilletni_src");
+            var qilletniSrc = Paths.get("qilletni-src");
 
             if (!Files.exists(manifestPath) && Files.exists(qilletniSrc)) {
                 manifestPath = qilletniSrc.resolve(manifestPath);
