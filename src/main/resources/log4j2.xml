@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<Configuration status="WARN">
+    <Appenders>
+        <!-- Standard Output (Info & Debug Logs) -->
+        <Console name="ConsoleOut" target="SYSTEM_OUT">
+            <PatternLayout disableAnsi="false">
+                <Pattern>[%d{HH:mm:ss}] [%t/%highlight{%p}]: %msg%n%throwable</Pattern>
+            </PatternLayout>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Logger name="dev.qilletni.qpm" level="${sys:QPM_LOG_LEVEL:-DEBUG}" additivity="false">
+            <AppenderRef ref="ConsoleOut"/>
+        </Logger>
+        <Root level="${sys:OTHER_LOG_LEVEL:-INFO}">
+            <AppenderRef ref="ConsoleOut"/>
+        </Root>
+    </Loggers>
+</Configuration>

@@ -38,8 +38,8 @@ public class InstallCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         try {
-            Path manifestPath = Paths.get("qilletni_info.yml");
-            Path lockFilePath = Paths.get("qilletni.lock");
+            var manifestPath = Paths.get("qilletni_info.yml");
+            var lockFilePath = Paths.get("qilletni.lock");
             var qilletniSrc = Paths.get("qilletni-src");
 
             if (!Files.exists(manifestPath) && Files.exists(qilletniSrc)) {
@@ -59,11 +59,11 @@ public class InstallCommand implements Callable<Integer> {
                 ProgressDisplay.info("Lock file not found, resolving dependencies...");
 
                 // Parse manifest
-                Manifest manifest = Manifest.parse(manifestPath);
+                var manifest = Manifest.parse(manifestPath);
                 ProgressDisplay.info("Resolving dependencies for " + manifest.name() + "...");
 
                 // Resolve dependencies
-                DependencyResolver resolver = new DependencyResolver(registryClient);
+                var resolver = new DependencyResolver(registryClient);
                 lockFile = resolver.resolve(manifest);
 
                 // Write lock file

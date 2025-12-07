@@ -62,7 +62,7 @@ public class DependencyResolver {
                 continue;
             }
 
-            // Fetch package index with all version details (optimized - single request)
+            // Fetch package index with all version details
             PackageVersionList versionList = fetchPackageIndex(packageName);
             if (versionList.versions().isEmpty()) {
                 throw new ResolutionException("No versions found for package: " + packageName);
@@ -82,7 +82,7 @@ public class DependencyResolver {
 
             logger.info("Resolved {} to version {}", packageName, bestVersion);
 
-            // Get the version info from the index (no additional request needed!)
+            // Get the version info from the index (already fetched)
             VersionInfo versionInfo = versionList.findVersion(bestVersion.toString());
             if (versionInfo == null) {
                 throw new ResolutionException("Version info not found for " + packageName + "@" + bestVersion);
