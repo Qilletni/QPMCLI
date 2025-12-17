@@ -17,7 +17,6 @@ public class ColorSupport {
      * - Explicit user configuration
      */
     public static boolean isColorEnabled() {
-        System.out.println("asas");
         if (colorEnabled != null) {
             return colorEnabled;
         }
@@ -26,7 +25,6 @@ public class ColorSupport {
         String noColor = System.getenv("NO_COLOR");
         if (noColor != null && !noColor.isEmpty()) {
             colorEnabled = false;
-            System.out.println("00000000000");
             return false;
         }
 
@@ -34,18 +32,14 @@ public class ColorSupport {
         String ci = System.getenv("CI");
         if ("true".equalsIgnoreCase(ci)) {
             colorEnabled = false;
-            System.out.println("1111111111111");
             return false;
         }
 
         // Check if stdout is a TTY
         if (System.console() == null || !isTerminal()) {
             colorEnabled = false;
-            System.out.println("222222");
             return false;
         }
-
-        System.out.println("true");
 
         // Default to enabled if terminal supports it
         colorEnabled = true;
@@ -56,12 +50,8 @@ public class ColorSupport {
      * Check if stdout is connected to a terminal.
      */
     private static boolean isTerminal() {
-        // Check TERM environment variable
-        String term = System.getenv("TERM");
-        if (term == null || term.isEmpty() || "dumb".equals(term)) {
-            return false;
-        }
-        return true;
+        var term = System.getenv("TERM");
+        return term != null && !term.isEmpty() && !"dumb".equals(term);
     }
 
     /**
