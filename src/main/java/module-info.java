@@ -6,4 +6,6 @@ module qilletni.cli {
     requires java.net.http;
     requires info.picocli;
     requires org.yaml.snakeyaml;
+    requires org.apache.logging.log4j.core;
+    requires org.apache.logging.log4j;
 }

@@ -176,12 +176,24 @@ public class ConfigManager {
     }
 
     /**
+     * Gets the packages directory path (~/.qilletni/packages-local).
+     */
+    public static Path getLocalPackagesDir() {
+        return CONFIG_DIR.resolve("packages-local");
+    }
+
+    /**
      * Ensures the packages directory exists.
      */
     public static void ensurePackagesDir() throws IOException {
-        Path packagesDir = getPackagesDir();
+        var packagesDir = getPackagesDir();
         if (!Files.exists(packagesDir)) {
             Files.createDirectories(packagesDir);
+        }
+
+        var localPackagesDir = getLocalPackagesDir();
+        if (!Files.exists(localPackagesDir)) {
+            Files.createDirectories(localPackagesDir);
         }
     }
 }

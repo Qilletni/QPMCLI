@@ -70,10 +70,10 @@ public class LoginCommand implements Callable<Integer> {
             return 0;
 
         } catch (AuthenticationException e) {
-            ProgressDisplay.error(e.getMessage());
+            ProgressDisplay.error("Authentication failed", e);
             return 1;
         } catch (Exception e) {
-            ProgressDisplay.error("Authentication failed: " + e.getMessage());
+            ProgressDisplay.error("Authentication failed", e);
             return 1;
         }
     }

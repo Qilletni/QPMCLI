@@ -3,6 +3,8 @@ package dev.qilletni.qpm.cli.commands;
 import dev.qilletni.pkgutil.manifest.LockFile;
 import dev.qilletni.pkgutil.manifest.models.ResolvedPackage;
 import dev.qilletni.qpm.cli.config.ConfigManager;
+import dev.qilletni.qpm.cli.exceptions.IntegrityException;
+import dev.qilletni.qpm.cli.exceptions.RegistryException;
 import dev.qilletni.qpm.cli.integrity.IntegrityVerifier;
 import dev.qilletni.qpm.cli.manifest.DependencyResolver;
 import dev.qilletni.qpm.cli.manifest.Manifest;
@@ -11,6 +13,7 @@ import dev.qilletni.qpm.cli.utils.ProgressDisplay;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -98,10 +101,29 @@ public class InstallCommand implements Callable<Integer> {
             return 0;
 
         } catch (Exception e) {
-            ProgressDisplay.error("Installation failed: " + e.getMessage());
-            e.printStackTrace();
+            ProgressDisplay.error("Installation failed: " + e.getMessage(), e);
             return 1;
         }
+    }
+
+    /**
+     * Checks if a given package has a locally-published copy.
+     * TODO: Currently this does not check for compatible package versions, only exact matches. Should this be changed?
+     *
+     * @param scope The scope of the package.
+     * @param name The name of the package.
+     * @param version The version of the package.
+     * @return If a locally published copy exists.
+     * @throws IOException
+     */
+    private boolean hasLocalVariant(String scope, String name, String version) throws IOException {
+        var packagesDir = ConfigManager.getLocalPackagesDir();
+        var packageDir = packagesDir.resolve(scope).resolve(name);
+        Files.createDirectories(packageDir);
+
+        var packagePath = packageDir.resolve("%s-%s.qll".formatted(name, version));
+
+        return Files.exists(packagePath);
     }
 
     /**
@@ -120,12 +142,18 @@ public class InstallCommand implements Callable<Integer> {
             String scope = parts[0];
             String name = parts[1];
 
+            if (hasLocalVariant(scope, name, pkg.version())) {
+                ProgressDisplay.success(pkg.name() + "@" + pkg.version() + " (local version found)");
+                installedCount++;
+                return;
+            }
+
             // Build package path
-            Path packagesDir = ConfigManager.getPackagesDir();
-            Path packageDir = packagesDir.resolve(scope).resolve(name);
+            var packagesDir = ConfigManager.getPackagesDir();
+            var packageDir = packagesDir.resolve(scope).resolve(name);
             Files.createDirectories(packageDir);
 
-            Path packagePath = packageDir.resolve(pkg.version() + ".qll");
+            var packagePath = packageDir.resolve("%s-%s.qll".formatted(name, pkg.version()));
 
             // Check if already installed and verified
             if (Files.exists(packagePath)) {
@@ -134,7 +162,7 @@ public class InstallCommand implements Callable<Integer> {
                     ProgressDisplay.success(pkg.name() + "@" + pkg.version() + " (already installed)");
                     installedCount++;
                     return;
-                } catch (Exception e) {
+                } catch (IntegrityException | IOException e) {
                     // Integrity check failed, re-download
                     ProgressDisplay.warn(pkg.name() + "@" + pkg.version() + " - integrity check failed, re-downloading");
                     Files.deleteIfExists(packagePath);
@@ -151,7 +179,7 @@ public class InstallCommand implements Callable<Integer> {
             ProgressDisplay.success(pkg.name() + "@" + pkg.version());
             installedCount++;
 
-        } catch (Exception e) {
+        } catch (IntegrityException | IOException | RegistryException e) {
             ProgressDisplay.error("✗ " + pkg.name() + "@" + pkg.version() + " - " + e.getMessage());
         }
     }

@@ -9,7 +9,7 @@ import java.util.stream.Collectors;
  * Utility class for semantic versioning operations.
  * Supports version parsing, constraint matching, and version comparison.
  */
-public class SemverUtils {
+public class SemverUtility {
 
     /**
      * Checks if a version satisfies a constraint.

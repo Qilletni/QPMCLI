@@ -6,7 +6,7 @@ import dev.qilletni.qpm.cli.exceptions.RegistryException;
 import dev.qilletni.qpm.cli.exceptions.ResolutionException;
 import dev.qilletni.qpm.cli.models.*;
 import dev.qilletni.qpm.cli.registry.RegistryClient;
-import dev.qilletni.qpm.cli.utils.SemverUtils;
+import dev.qilletni.qpm.cli.utils.SemverUtility;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,7 +51,7 @@ public class DependencyResolver {
                 ResolvedPackage existingPkg = findResolvedPackage(resolved, packageName);
                 Version existingVersion = Version.parse(existingPkg.version());
 
-                if (!SemverUtils.satisfies(existingVersion, constraint)) {
+                if (!SemverUtility.satisfies(existingVersion, constraint)) {
                     throw new ResolutionException(String.format(
                         "Conflict: %s requires version %s but %s is already resolved",
                         packageName, constraint, existingVersion
@@ -72,7 +72,7 @@ public class DependencyResolver {
             List<String> availableVersions = versionList.getVersionStrings();
 
             // Find best matching version
-            Version bestVersion = SemverUtils.findMaxSatisfying(availableVersions, constraint);
+            Version bestVersion = SemverUtility.findMaxSatisfying(availableVersions, constraint);
             if (bestVersion == null) {
                 throw new ResolutionException(String.format(
                     "No version of %s satisfies constraint: %s (available: %s)",
@@ -90,7 +90,7 @@ public class DependencyResolver {
 
             // Create resolved package using data from the index
             var packageNameScope = RegistryClient.parsePackageName(packageName);
-            String resolvedUrl = String.format("%s/%s/%s", packageNameScope.scope(), packageNameScope.name(), bestVersion);
+            String resolvedUrl = String.format("%s/%s/%s-%s", packageNameScope.scope(), packageNameScope.name(), packageNameScope.name(), bestVersion);
 
             ResolvedPackage resolvedPkg = new ResolvedPackage(
                 packageName,
