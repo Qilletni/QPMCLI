@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
     subcommands = {
         LoginCommand.class,
         PublishCommand.class,
-            PublishLocalCommand.class,
+        PublishLocalCommand.class,
         InstallCommand.class,
         VerifyCommand.class,
         ListCommand.class,
