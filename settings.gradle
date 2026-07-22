@@ -4,6 +4,25 @@ plugins {
 
 rootProject.name = 'QPMCLI'
 
+// Include sibling Qilletni repos if present
+def coreDir = file('../Qilletni')
+if (coreDir.exists()) {
+    includeBuild(coreDir) {
+        dependencySubstitution {
+            substitute module('dev.qilletni.api:qilletni-api') using project(':qilletni-api')
+        }
+    }
+} 
+
+def pkgUtilDir = file('../QilletniPackageUtility')
+if (pkgUtilDir.exists()) {
+    includeBuild(pkgUtilDir) {
+        dependencySubstitution {
+            substitute module('dev.qilletni.pkgutil:qilletni-pkgutil') using project(':')
+        }
+    }
+}
+
 develocity {
     buildScan {
         termsOfUseUrl = "https://gradle.com/terms-of-service"
