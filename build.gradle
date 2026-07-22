@@ -7,7 +7,7 @@ plugins {
 }
 
 group = 'dev.qilletni.qpm.cli'
-version = '1.0.0'
+version = '1.0.1-SNAPSHOT'
 
 sourceCompatibility = JavaVersion.VERSION_22
 targetCompatibility = JavaVersion.VERSION_22
