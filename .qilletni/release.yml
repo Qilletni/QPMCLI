@@ -1,0 +1,38 @@
+schema_version: 1
+repository: Qilletni/QPMCLI
+
+# QPM is a CLI distribution (an executable archive), not a published Maven
+# library - so it has no 'artifacts'/'japicmp' block (only required for
+# kind: maven). Its own CLI/integration compatibility is instead enforced by
+# the PR CI workflow's build/test/archive/manifest gates; see
+# docs/migrations/README.md.
+components:
+  - name: qpm
+    kind: cli
+    version_file: gradle.properties
+    version_key: qpmVersion
+    changelog: CHANGELOG.md
+
+# qilletni-core (dev.qilletni.impl:qilletni) and qilletni-api
+# (dev.qilletni.api:qilletni-api) are released together as one atomic unit
+# by Qilletni/Qilletni. QPM only ever adds qilletni-api as an actual build
+# dependency - never core - so the core coordinate is marked
+# 'resolved: false': it stays mandatory and hash-verified by the
+# dependency-update automation (keeping it coupled to the same shared
+# version), but is never expected to appear on QPM's own resolved classpath.
+dependencies:
+  - upstream_component: qilletni-core
+    repository: Qilletni/Qilletni
+    coordinates:
+      - coordinate: dev.qilletni.impl:qilletni
+        resolved: false
+      - dev.qilletni.api:qilletni-api
+    version_file: gradle.properties
+    version_key: qilletniCoreVersion
+
+  - upstream_component: qilletni-pkgutil
+    repository: Qilletni/QilletniPackageUtility
+    coordinates:
+      - dev.qilletni.pkgutil:qilletni-pkgutil
+    version_file: gradle.properties
+    version_key: qilletniPkgutilVersion

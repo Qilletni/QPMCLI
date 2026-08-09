@@ -1,0 +1,26 @@
+name: Dependency Update
+
+# Receives a `qilletni-dependency-release` dispatch (sent by Qilletni/Qilletni's or
+# QilletniPackageUtility's `reusable-dependency-dispatch.yml`) for an upstream component
+# listed in this repository's own `.qilletni/release.yml` `dependencies` mapping.
+# All actual validation/verification/update logic lives centrally in
+# `reusable-dependency-update.yml`; this file only forwards the event and this
+# repository's own scoped App credentials. This workflow never auto-merges.
+
+on:
+  repository_dispatch:
+    types: [qilletni-dependency-release]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  update-dependency:
+    if: github.repository == 'Qilletni/QPMCLI'
+    uses: Qilletni/Qilletni/.github/workflows/reusable-dependency-update.yml@master
+    with:
+      payload: ${{ toJson(github.event.client_payload) }}
+    secrets:
+      app-id: ${{ secrets.QILLETNI_RELEASE_APP_ID }}
+      app-private-key: ${{ secrets.QILLETNI_RELEASE_APP_PRIVATE_KEY }}

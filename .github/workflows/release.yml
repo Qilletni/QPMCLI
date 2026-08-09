@@ -1,4 +1,20 @@
-name: Publish
+name: Publish Release
+
+# Local caller workflow for QPM.
+#
+# Preparing a release is done via the "Release - Prepare" workflow
+# (release-prepare.yml), which opens a `release/qpm-X.Y.Z` PR carrying a
+# `release/pending-release.json` marker. Merging that PR to `master` does NOT
+# require a maintainer to push a tag: the `tag-release` job below detects the
+# marker, validates its provenance, and idempotently creates the immutable
+# `vX.Y.Z` tag at the merge commit itself, which then triggers
+# `build-and-publish`. A direct `vX.Y.Z` tag push remains supported only as a
+# manual recovery path if that automation ever fails.
+#
+# Snapshot publishing (push to `master` while the version is still
+# `-SNAPSHOT`) is kept in its own, unprotected job (no `production-release`
+# environment) so it stays isolated from a stable release and is never
+# mistaken for one.
 
 on:
   push:
@@ -8,67 +24,116 @@ on:
       - master
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  check-version:
+  # Runs only on a push to `master`. Distinguishes an ordinary/snapshot
+  # commit from a just-merged release-preparation PR, and - only for the
+  # latter - idempotently creates the immutable release tag.
+  tag-release:
     runs-on: ubuntu-latest
-    if: github.repository == 'Qilletni/QPMCLI'
-    outputs:
-      version: ${{ steps.get_version.outputs.version }}
-      is_snapshot: ${{ steps.get_version.outputs.is_snapshot }}
+    if: github.repository == 'Qilletni/QPMCLI' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
         with:
-          java-version: '22'
-          distribution: 'temurin'
-          cache: 'gradle'
+          fetch-depth: 0
 
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: actions/checkout@v6
+        with:
+          repository: Qilletni/Qilletni
+          path: .qilletni-release-tooling
+          sparse-checkout: tools/release
+          submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
 
-      - name: Get and validate version
-        id: get_version
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: .qilletni-release-tooling/tools/release/package-lock.json
+
+      - name: Install release tooling dependencies
+        working-directory: .qilletni-release-tooling/tools/release
+        run: npm ci
+
+      - name: Detect whether this commit is a release-preparation merge
+        id: detect
+        working-directory: .qilletni-release-tooling/tools/release
         run: |
-          GRADLE_VERSION=$(./gradlew :properties -q | grep "^version:" | awk '{print $2}')
-          echo "version=$GRADLE_VERSION" >> $GITHUB_OUTPUT
+          ROOT_VERSION=$(node --import tsx src/cli.ts get-property --file "$GITHUB_WORKSPACE/gradle.properties" --key qpmVersion)
+          echo "Version on master: $ROOT_VERSION"
 
-          if [[ "$GRADLE_VERSION" =~ -SNAPSHOT$ ]]; then
-            # SNAPSHOT: only allow from branch push, not tag push
-            if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-              echo "Error: Tagged release but version $GRADLE_VERSION is a SNAPSHOT"
+          if [[ "$ROOT_VERSION" =~ -SNAPSHOT$ ]]; then
+            if [[ -f "$GITHUB_WORKSPACE/release/pending-release.json" ]]; then
+              echo "::error::Unexpected release/pending-release.json marker present alongside a SNAPSHOT version ($ROOT_VERSION); refusing to auto-tag."
               exit 1
             fi
-            echo "is_snapshot=true" >> $GITHUB_OUTPUT
-            echo "Confirmed SNAPSHOT version: $GRADLE_VERSION"
-          else
-            # Release: must be from tag push and versions must match
-            if [[ "$GITHUB_REF" != refs/tags/* ]]; then
-              echo "Error: Non-SNAPSHOT version $GRADLE_VERSION requires a tag"
-              exit 1
-            fi
-          
-            TAG=${GITHUB_REF#refs/tags/}
-            TAG_VERSION=${TAG#v}
-          
-            if [[ "$GRADLE_VERSION" != "$TAG_VERSION" ]]; then
-              echo "Error: Gradle version $GRADLE_VERSION does not match tag $TAG (expected $TAG_VERSION)"
-              exit 1
-            fi
-          
-            echo "is_snapshot=false" >> $GITHUB_OUTPUT
-            echo "Confirmed release version: $GRADLE_VERSION"
+            echo "Ordinary snapshot commit; nothing to tag here."
+            echo "is_release_merge=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-  build-artifacts:
+          if [[ ! -f "$GITHUB_WORKSPACE/release/pending-release.json" ]]; then
+            echo "::error::Version '$ROOT_VERSION' is not a SNAPSHOT and no release/pending-release.json marker was found. A stable version may only reach master through the release-preparation PR."
+            exit 1
+          fi
+
+          echo "is_release_merge=true" >> "$GITHUB_OUTPUT"
+          echo "version=$ROOT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$ROOT_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Validate the release marker
+        if: steps.detect.outputs.is_release_merge == 'true'
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          node --import tsx src/cli.ts check-release-marker \
+            --marker "$GITHUB_WORKSPACE/release/pending-release.json" \
+            --expected-component qpm \
+            --expected-version "${{ steps.detect.outputs.version }}"
+
+      - name: Validate this commit came from a genuine, merged release PR
+        if: steps.detect.outputs.is_release_merge == 'true'
+        working-directory: .qilletni-release-tooling/tools/release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -sf -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
+            | node --import tsx src/cli.ts check-merge-provenance \
+                --component qpm \
+                --version "${{ steps.detect.outputs.version }}"
+
+      - name: Idempotently create the immutable release tag
+        if: steps.detect.outputs.is_release_merge == 'true'
+        run: |
+          TAG="${{ steps.detect.outputs.tag }}"
+          EXISTING_SHA=$(git rev-parse "refs/tags/$TAG" 2>/dev/null || true)
+
+          if [[ -n "$EXISTING_SHA" ]]; then
+            if [[ "$EXISTING_SHA" != "$GITHUB_SHA" ]]; then
+              echo "::error::Tag '$TAG' already exists at a different commit ($EXISTING_SHA); refusing to move an immutable release tag."
+              exit 1
+            fi
+            echo "Tag '$TAG' already exists at this commit; nothing to do (idempotent)."
+          else
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "refs/tags/$TAG"
+          fi
+
+  # Runs only on a push to `master` while the version is still a SNAPSHOT.
+  # Isolated from build-and-publish: its own job, no production-release
+  # environment, so it never shares that protected publication path.
+  publish-snapshot:
     runs-on: ubuntu-latest
-    needs: check-version
+    needs: tag-release
+    if: github.repository == 'Qilletni/QPMCLI' && needs.tag-release.result == 'success'
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Java
+      - name: Set up JDK
         uses: actions/setup-java@v5
         with:
           java-version: '22'
@@ -77,78 +142,230 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
-      - name: Build Project
-        run: ./gradlew shadowJar
-
-      - name: Package Release Asset
+      - name: Check this is a SNAPSHOT version
+        id: check
         run: |
-          tar -czvf qpm-${{ needs.check-version.outputs.version }}.tar.gz \
-            --transform 's|.*/||' \
-            build/libs/QPM.jar \
-            scripts/qpm.bat \
-            scripts/qpm
+          VERSION=$(./gradlew properties -q -PincludeSiblingBuilds=false | grep "^version:" | awk '{print $2}')
+
+          if [[ ! "$VERSION" =~ -SNAPSHOT$ ]]; then
+            echo "Not a SNAPSHOT version ($VERSION); this push was a release merge, handled by build-and-publish instead."
+            echo "is_snapshot=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "is_snapshot=true" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build the release archive
+        if: steps.check.outputs.is_snapshot == 'true'
+        run: ./gradlew releaseArchive -PincludeSiblingBuilds=false
+
+      - name: Extract release notes
+        if: steps.check.outputs.is_snapshot == 'true'
+        uses: ffurrer2/extract-release-notes@v2
+        with:
+          changelog_file: CHANGELOG.md
+          release_notes_file: RELEASE_NOTES.md
+          prerelease: true
+
+      - name: Update snapshot tag
+        if: steps.check.outputs.is_snapshot == 'true'
+        run: |
+          git tag -f snapshot
+          git push origin --force refs/tags/snapshot
+
+      - name: Create snapshot release
+        if: steps.check.outputs.is_snapshot == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: snapshot
+          name: ${{ steps.check.outputs.version }}
+          prerelease: true
+          body_path: RELEASE_NOTES.md
+          files: |
+            build/distributions/qpm-${{ steps.check.outputs.version }}.tar.gz
+            build/libs/QPM.jar
+            build/reports/cyclonedx-direct/bom.json
+            build/component-manifest.json
+
+  # Runs only on a `vX.Y.Z` tag push - either created automatically by
+  # `tag-release` above, or (recovery path) pushed directly by a maintainer.
+  build-and-publish:
+    runs-on: ubuntu-latest
+    if: github.repository == 'Qilletni/QPMCLI' && startsWith(github.ref, 'refs/tags/')
+    environment: production-release
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      commit: ${{ github.sha }}
+      asset_name: ${{ steps.archive.outputs.asset_name }}
+      asset_sha256: ${{ steps.archive.outputs.sha256 }}
+      api_version: ${{ steps.check.outputs.api_version }}
+      pkgutil_version: ${{ steps.check.outputs.pkgutil_version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version: '22'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - uses: actions/checkout@v6
+        with:
+          repository: Qilletni/Qilletni
+          path: .qilletni-release-tooling
+          sparse-checkout: tools/release
+          submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: .qilletni-release-tooling/tools/release/package-lock.json
+
+      - name: Install release tooling dependencies
+        working-directory: .qilletni-release-tooling/tools/release
+        run: npm ci
+
+      - name: Validate release configuration
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          node --import tsx src/cli.ts validate-release-config --config "$GITHUB_WORKSPACE/.qilletni/release.yml"
+
+      - name: Check the tag matches qpmVersion, and read the embedded upstream versions
+        id: check
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          VERSION=$(node --import tsx src/cli.ts get-property --file "$GITHUB_WORKSPACE/gradle.properties" --key qpmVersion)
+          API_VERSION=$(node --import tsx src/cli.ts get-property --file "$GITHUB_WORKSPACE/gradle.properties" --key qilletniCoreVersion)
+          PKGUTIL_VERSION=$(node --import tsx src/cli.ts get-property --file "$GITHUB_WORKSPACE/gradle.properties" --key qilletniPkgutilVersion)
+
+          TAG=${GITHUB_REF#refs/tags/}
+          TAG_VERSION=${TAG#v}
+
+          if [[ "$VERSION" != "$TAG_VERSION" ]]; then
+            echo "::error::Tag version $TAG_VERSION does not match qpmVersion $VERSION"
+            exit 1
+          fi
+
+          if [[ "$VERSION" =~ -SNAPSHOT$ ]]; then
+            echo "::error::Cannot release a SNAPSHOT version on a tag."
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "api_version=$API_VERSION" >> "$GITHUB_OUTPUT"
+          echo "pkgutil_version=$PKGUTIL_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Confirmed Release: $VERSION"
+
+      - name: Ensure the resolved dependency graph has no SNAPSHOT/dynamic versions
+        run: ./gradlew checkNoSnapshotDependencies -PincludeSiblingBuilds=false
+
+      - name: Build the release archive (jar, launcher scripts, SBOM, component-manifest.json)
+        run: ./gradlew releaseArchive -PincludeSiblingBuilds=false
+
+      - name: Compute the release archive's sha256
+        id: archive
+        run: |
+          ASSET="qpm-${{ steps.check.outputs.version }}.tar.gz"
+          SHA256=$(sha256sum "build/distributions/$ASSET" | awk '{print $1}')
+          echo "asset_name=$ASSET" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
 
       - name: Extract release notes
         uses: ffurrer2/extract-release-notes@v2
         with:
           changelog_file: CHANGELOG.md
           release_notes_file: RELEASE_NOTES.md
-          prerelease: ${{ needs.check-version.outputs.is_snapshot }}
+          prerelease: false
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v5
-        with:
-          name: release-artifacts
-          path: |
-            qpm-${{ needs.check-version.outputs.version }}.tar.gz
-            build/libs/QPM.jar
-            RELEASE_NOTES.md
+      - name: Create GitHub Release with the archive, SBOM and component-manifest.json
+        run: |
+          gh release create "${{ github.ref_name }}" --notes-file RELEASE_NOTES.md \
+            "build/distributions/${{ steps.archive.outputs.asset_name }}" \
+            "build/libs/QPM.jar" \
+            "build/reports/cyclonedx-direct/bom.json#qpm-bom.json" \
+            "build/component-manifest.json"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  publish-snapshot:
+  # Notifies Qilletni/Qilletni of this stable release, via the exact
+  # `qilletni-platform-component-release` event schema (see
+  # `src/release_event.ts` in Qilletni/Qilletni), so it can stage this
+  # release as a platform candidate. The GitHub App token is scoped to only
+  # Qilletni/Qilletni - never a broad, org-wide token.
+  dispatch-platform:
+    needs: build-and-publish
     runs-on: ubuntu-latest
-    needs: [check-version, build-artifacts]
-    if: needs.check-version.outputs.is_snapshot == 'true'
+    if: github.repository == 'Qilletni/QPMCLI'
     steps:
       - uses: actions/checkout@v6
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v6
         with:
-          name: release-artifacts
+          repository: Qilletni/Qilletni
+          path: .qilletni-release-tooling
+          sparse-checkout: tools/release
+          submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
 
-      - name: Update snapshot tag
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: .qilletni-release-tooling/tools/release/package-lock.json
+
+      - name: Install release tooling dependencies
+        working-directory: .qilletni-release-tooling/tools/release
+        run: npm ci
+
+      - name: Build the platform-component-release event
+        id: event
+        working-directory: .qilletni-release-tooling/tools/release
         run: |
-          git tag -f snapshot
-          git push origin --force refs/tags/snapshot
+          EVENT=$(node --import tsx src/cli.ts build-release-event \
+            --component qpm \
+            --repository Qilletni/QPMCLI \
+            --version "${{ needs.build-and-publish.outputs.version }}" \
+            --commit "${{ needs.build-and-publish.outputs.commit }}" \
+            --asset "${{ needs.build-and-publish.outputs.asset_name }}" \
+            --sha256 "${{ needs.build-and-publish.outputs.asset_sha256 }}" \
+            --embed "api=${{ needs.build-and-publish.outputs.api_version }}" \
+            --embed "pkgutil=${{ needs.build-and-publish.outputs.pkgutil_version }}")
+          {
+            echo 'json<<EVENT_EOF'
+            echo "$EVENT"
+            echo 'EVENT_EOF'
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Create snapshot release
-        uses: softprops/action-gh-release@v2
+      - name: Mint a GitHub App token scoped only to Qilletni/Qilletni
+        id: app-token
+        uses: actions/create-github-app-token@v3
         with:
-          tag_name: snapshot
-          name: ${{ needs.check-version.outputs.version }}
-          prerelease: true
-          body_path: RELEASE_NOTES.md
-          files: |
-            qpm-${{ needs.check-version.outputs.version }}.tar.gz
-            build/libs/QPM.jar
+          app-id: ${{ secrets.QILLETNI_RELEASE_APP_ID }}
+          private-key: ${{ secrets.QILLETNI_RELEASE_APP_PRIVATE_KEY }}
+          owner: Qilletni
+          repositories: Qilletni
 
-  publish-release:
-    runs-on: ubuntu-latest
-    needs: [check-version, build-artifacts]
-    if: needs.check-version.outputs.is_snapshot == 'false'
-    steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@v6
+      - name: Dispatch the platform-component-release event to Qilletni/Qilletni
+        uses: peter-evans/repository-dispatch@v3
         with:
-          name: release-artifacts
+          token: ${{ steps.app-token.outputs.token }}
+          repository: Qilletni/Qilletni
+          event-type: qilletni-platform-component-release
+          client-payload: ${{ steps.event.outputs.json }}
 
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.check-version.outputs.version }}
-          name: v${{ needs.check-version.outputs.version }}
-          prerelease: false
-          body_path: RELEASE_NOTES.md
-          files: |
-            qpm-${{ needs.check-version.outputs.version }}.tar.gz
-            build/libs/QPM.jar
+  snapshot-followup:
+    needs: [build-and-publish, dispatch-platform]
+    uses: Qilletni/Qilletni/.github/workflows/reusable-snapshot-followup.yml@master
+    with:
+      version_file: gradle.properties
+      version_key: qpmVersion
+      released_version: ${{ needs.build-and-publish.outputs.version }}
+    secrets:
+      app-id: ${{ secrets.QILLETNI_RELEASE_APP_ID }}
+      app-private-key: ${{ secrets.QILLETNI_RELEASE_APP_PRIVATE_KEY }}

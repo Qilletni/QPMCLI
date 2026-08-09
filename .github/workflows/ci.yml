@@ -1,0 +1,116 @@
+name: CI
+
+# PR CI: builds, tests, and validates every gate the release workflow itself
+# relies on (shadow jar, release archive, dependency locks, the
+# stable-dependency guard, the generated component-manifest.json and SBOM),
+# plus workflow YAML/actionlint. Runs on every pull request and on pushes to
+# `master`.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version: '22'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Build and test
+        run: ./gradlew clean build -PincludeSiblingBuilds=false
+
+      - name: Verify dependency locks are up to date
+        run: |
+          ./gradlew dependencies --write-locks -PincludeSiblingBuilds=false
+          if ! git diff --exit-code -- gradle.lockfile; then
+            echo "::error::gradle.lockfile is out of date; run './gradlew dependencies --write-locks' and commit the result."
+            exit 1
+          fi
+
+      - name: Stable-dependency guard
+        run: ./gradlew checkNoSnapshotDependencies -PincludeSiblingBuilds=false
+
+      - name: Build the shadow jar
+        run: ./gradlew shadowJar -PincludeSiblingBuilds=false
+
+      - name: Build the release archive (jar, launcher scripts, SBOM, component-manifest.json)
+        run: ./gradlew releaseArchive -PincludeSiblingBuilds=false
+
+      - name: Verify the CycloneDX SBOM was generated
+        run: test -s build/reports/cyclonedx-direct/bom.json
+
+      - name: Inspect the generated component-manifest.json
+        run: |
+          MANIFEST=build/component-manifest.json
+          jq -e '.schema_version == 1' "$MANIFEST" > /dev/null || { echo "::error::component-manifest.json: schema_version must be 1"; exit 1; }
+          jq -e '.component == "qpm"' "$MANIFEST" > /dev/null || { echo "::error::component-manifest.json: component must be 'qpm'"; exit 1; }
+          jq -e '.repository == "Qilletni/QPMCLI"' "$MANIFEST" > /dev/null || { echo "::error::component-manifest.json: repository must be 'Qilletni/QPMCLI'"; exit 1; }
+          jq -e '.version | length > 0' "$MANIFEST" > /dev/null || { echo "::error::component-manifest.json: version must be present"; exit 1; }
+          jq -e '.commit and .commit != "unknown"' "$MANIFEST" > /dev/null || { echo "::error::component-manifest.json: 'commit' was not resolved"; exit 1; }
+          jq -e '.embeds.api | length > 0' "$MANIFEST" > /dev/null || { echo "::error::component-manifest.json: embeds.api must be present"; exit 1; }
+          jq -e '.embeds.pkgutil | length > 0' "$MANIFEST" > /dev/null || { echo "::error::component-manifest.json: embeds.pkgutil must be present"; exit 1; }
+          echo "component-manifest.json OK: $(cat "$MANIFEST")"
+
+      - name: Verify the release archive contains the expected entries
+        run: |
+          ARCHIVE=$(ls build/distributions/qpm-*.tar.gz)
+          tar -tzf "$ARCHIVE" | sort > /tmp/archive-contents.txt
+          cat /tmp/archive-contents.txt
+          for entry in QPM.jar qpm qpm.bat qpm-bom.json component-manifest.json; do
+            if ! grep -qx "$entry" /tmp/archive-contents.txt; then
+              echo "::error::Release archive is missing '$entry'"
+              exit 1
+            fi
+          done
+
+      - name: Verify qpm --version reports the embedded upstream versions
+        run: |
+          OUTPUT=$(java -jar build/libs/QPM.jar --version)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "^qpm " || (echo "::error::qpm --version is missing the own version line" && exit 1)
+          echo "$OUTPUT" | grep -q "^dev.qilletni.api:qilletni-api " || (echo "::error::qpm --version is missing the embedded qilletni-api version" && exit 1)
+          echo "$OUTPUT" | grep -q "^dev.qilletni.pkgutil:qilletni-pkgutil " || (echo "::error::qpm --version is missing the embedded qilletni-pkgutil version" && exit 1)
+          echo "$OUTPUT" | grep -q "^commit " || (echo "::error::qpm --version is missing the embedded source commit" && exit 1)
+
+      - uses: actions/checkout@v6
+        with:
+          repository: Qilletni/Qilletni
+          path: .qilletni-release-tooling
+          sparse-checkout: tools/release
+          submodules: true  # tools/release submodule (Qilletni/ReleaseTooling)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: .qilletni-release-tooling/tools/release/package-lock.json
+
+      - name: Validate .qilletni/release.yml against the central schema
+        working-directory: .qilletni-release-tooling/tools/release
+        run: |
+          npm ci
+          node --import tsx src/cli.ts validate-release-config --config "$GITHUB_WORKSPACE/.qilletni/release.yml"
+
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: actionlint
+        uses: reviewdog/action-actionlint@v1
+        with:
+          fail_level: error

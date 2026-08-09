@@ -1,6 +1,7 @@
 package dev.qilletni.qpm.cli;
 
 import dev.qilletni.qpm.cli.commands.*;
+import dev.qilletni.qpm.cli.version.QpmVersionProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.slf4j.Logger;
@@ -12,7 +13,7 @@ import java.util.stream.Collectors;
 
 @CommandLine.Command(
     name = "qpm",
-    version = "v1.0.0-SNAPSHOT",
+    versionProvider = QpmVersionProvider.class,
     description = "Qilletni Package Manager - A CLI tool for managing Qilletni packages",
     subcommands = {
         LoginCommand.class,

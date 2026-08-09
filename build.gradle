@@ -4,16 +4,26 @@ plugins {
     id 'application'
     id 'maven-publish'
     id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'org.cyclonedx.bom' version '3.2.4'
 }
 
 group = 'dev.qilletni.qpm.cli'
-version = '1.0.1-SNAPSHOT'
+version = qpmVersion
 
 sourceCompatibility = JavaVersion.VERSION_22
 targetCompatibility = JavaVersion.VERSION_22
 
 application {
     mainClass = 'dev.qilletni.qpm.cli.QilletniPackageManagerApplication'
+}
+
+// Locks the resolved dependency graph for the configurations used to build
+// the release archive, so a published version is always built from an
+// exact, checked-in set of resolved coordinates (gradle.lockfile).
+// Regenerate with `./gradlew dependencies --write-locks` after a dependency
+// change.
+dependencyLocking {
+    lockAllConfigurations()
 }
 
 repositories {
@@ -42,8 +52,10 @@ dependencies {
     implementation 'org.apache.logging.log4j:log4j-core:2.25.3'
     implementation 'org.apache.logging.log4j:log4j-slf4j2-impl:2.25.1'
 
-    implementation 'dev.qilletni.api:qilletni-api:1.0.0'
-    implementation 'dev.qilletni.pkgutil:qilletni-pkgutil:1.0.0'
+    // qilletni-core and qilletni-api are released together as one unit (see
+    // .qilletni/release.yml); QPM only ever depends on the API artifact.
+    implementation "dev.qilletni.api:qilletni-api:${qilletniCoreVersion}"
+    implementation "dev.qilletni.pkgutil:qilletni-pkgutil:${qilletniPkgutilVersion}"
 }
 
 idea {
@@ -82,4 +94,147 @@ task printVersion {
     doLast {
         println project.version
     }
+}
+
+// Resolves the exact source commit this build was produced from: the
+// releasing CI workflow's own checkout commit, falling back to a local git
+// lookup, and finally 'unknown' (e.g. a source archive with no .git dir).
+def resolveSourceCommit = {
+    def commit = System.getenv('GITHUB_SHA')
+    if (!commit) {
+        try {
+            def process = ['git', 'rev-parse', 'HEAD'].execute(null, projectDir)
+            process.waitFor()
+            if (process.exitValue() == 0) {
+                commit = process.text.trim()
+            }
+        } catch (IOException ignored) {
+            // git not available; fall back below
+        }
+    }
+    return commit ?: 'unknown'
+}
+
+// The embedded version resource backing `qpm --version` (see
+// dev.qilletni.qpm.cli.version.VersionInfo): this repository's own version,
+// plus the exact upstream qilletni-api/qilletni-pkgutil versions it was
+// built against, and the source commit.
+def generatedVersionResourcesDir = layout.buildDirectory.dir('generated/resources/version')
+
+tasks.register('generateVersionProperties') {
+    description = 'Generates the version.properties resource embedded for `qpm --version`'
+    def outputDir = generatedVersionResourcesDir
+    def qpmVersionValue = qpmVersion
+    def apiVersionValue = qilletniCoreVersion
+    def pkgutilVersionValue = qilletniPkgutilVersion
+    outputs.dir(outputDir)
+    doLast {
+        def dir = outputDir.get().asFile
+        dir.mkdirs()
+        new File(dir, 'version.properties').text = """\
+qpm.version=${qpmVersionValue}
+qilletni.api.version=${apiVersionValue}
+qilletni.pkgutil.version=${pkgutilVersionValue}
+qpm.commit=${resolveSourceCommit()}
+""".toString()
+    }
+}
+
+sourceSets {
+    main {
+        resources {
+            srcDir generatedVersionResourcesDir
+        }
+    }
+}
+
+processResources.dependsOn generateVersionProperties
+
+// component-manifest.json, packaged inside the release archive (and
+// attached separately as a GitHub Release asset): the same own/upstream
+// version data as version.properties above, in a machine-readable form
+// consumed by release/platform tooling (see release/src/platform_manifest.ts
+// in Qilletni/Qilletni).
+tasks.register('generateComponentManifest') {
+    description = 'Generates component-manifest.json describing this build for the release archive'
+    def outputFile = layout.buildDirectory.file('component-manifest.json')
+    def qpmVersionValue = qpmVersion
+    def apiVersionValue = qilletniCoreVersion
+    def pkgutilVersionValue = qilletniPkgutilVersion
+    outputs.file(outputFile)
+    doLast {
+        def manifest = [
+                schema_version: 1,
+                component     : 'qpm',
+                repository     : 'Qilletni/QPMCLI',
+                version        : qpmVersionValue,
+                commit         : resolveSourceCommit(),
+                embeds         : [
+                        api    : apiVersionValue,
+                        pkgutil: pkgutilVersionValue
+                ]
+        ]
+        def file = outputFile.get().asFile
+        file.parentFile.mkdirs()
+        file.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(manifest))
+    }
+}
+
+// CycloneDX JSON SBOM, packaged inside the release archive and also
+// attached separately as a release asset by the publish workflow.
+// Output: build/reports/cyclonedx-direct/bom.json
+cyclonedxDirectBom {
+    includeConfigs = ['runtimeClasspath']
+}
+
+// Guards a stable release publication from ever resolving a SNAPSHOT or
+// dynamic-version dependency, run by CI/release.yml before publishing a tag.
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+
+tasks.register('checkNoSnapshotDependencies') {
+    description = 'Fails if the resolved runtime/compile classpath contains a SNAPSHOT or dynamic external dependency version'
+    doLast {
+        def offenders = []
+        ['runtimeClasspath', 'compileClasspath'].each { configName ->
+            configurations.getByName(configName).incoming.resolutionResult.allComponents.each { component ->
+                def id = component.id
+                if (id instanceof ModuleComponentIdentifier) {
+                    def moduleVersion = id.version
+                    if (moduleVersion.contains('SNAPSHOT') || moduleVersion.contains('+') || moduleVersion.startsWith('latest.')) {
+                        offenders << "${configName}: ${id.group}:${id.module}:${moduleVersion}".toString()
+                    }
+                }
+            }
+        }
+        if (offenders) {
+            throw new GradleException("A stable release must not resolve SNAPSHOT/dynamic dependencies:\n" + offenders.join('\n'))
+        }
+    }
+}
+
+// The full executable release archive: the shadow jar (renamed to QPM.jar,
+// matching scripts/qpm and scripts/qpm.bat's expectations), the launcher
+// scripts, the CycloneDX SBOM, and component-manifest.json.
+import org.gradle.api.tasks.bundling.Tar
+import org.gradle.api.tasks.bundling.Compression
+
+tasks.register('releaseArchive', Tar) {
+    description = 'Builds the qpm-<version>.tar.gz executable release archive'
+    dependsOn tasks.named('shadowJar'), tasks.named('cyclonedxDirectBom'), tasks.named('generateComponentManifest')
+    archiveBaseName.set('qpm')
+    archiveVersion.set(project.version.toString())
+    archiveExtension.set('tar.gz')
+    compression = Compression.GZIP
+    destinationDirectory.set(layout.buildDirectory.dir('distributions'))
+
+    from(tasks.named('shadowJar').map { it.archiveFile }) {
+        rename { 'QPM.jar' }
+    }
+    from('scripts') {
+        include 'qpm', 'qpm.bat'
+    }
+    from(layout.buildDirectory.file('reports/cyclonedx-direct/bom.json')) {
+        rename { 'qpm-bom.json' }
+    }
+    from(tasks.named('generateComponentManifest').map { it.outputs.files.singleFile })
 }
