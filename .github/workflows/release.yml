@@ -79,9 +79,11 @@ jobs:
             exit 1
           fi
 
-          echo "is_release_merge=true" >> "$GITHUB_OUTPUT"
-          echo "version=$ROOT_VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$ROOT_VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "is_release_merge=true"
+            echo "version=$ROOT_VERSION"
+            echo "tag=v$ROOT_VERSION"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Validate the release marker
         if: steps.detect.outputs.is_release_merge == 'true'
@@ -142,10 +144,18 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
+      - name: Warm the Gradle wrapper
+        run: ./gradlew --version
+
       - name: Check this is a SNAPSHOT version
         id: check
         run: |
-          VERSION=$(./gradlew properties -q -PincludeSiblingBuilds=false | grep "^version:" | awk '{print $2}')
+          VERSION=$(./gradlew printVersion -q -PincludeSiblingBuilds=false | tail -n1 | tr -d '\r')
+          
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-SNAPSHOT)?$ ]]; then
+            echo "::error::Unexpected version output from Gradle: '$VERSION'"
+            exit 1
+          fi
 
           if [[ ! "$VERSION" =~ -SNAPSHOT$ ]]; then
             echo "Not a SNAPSHOT version ($VERSION); this push was a release merge, handled by build-and-publish instead."
@@ -260,9 +270,11 @@ jobs:
             exit 1
           fi
 
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "api_version=$API_VERSION" >> "$GITHUB_OUTPUT"
-          echo "pkgutil_version=$PKGUTIL_VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$VERSION"
+            echo "api_version=$API_VERSION"
+            echo "pkgutil_version=$PKGUTIL_VERSION"
+          } >> "$GITHUB_OUTPUT"
           echo "Confirmed Release: $VERSION"
 
       - name: Ensure the resolved dependency graph has no SNAPSHOT/dynamic versions
