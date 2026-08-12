@@ -50,7 +50,7 @@ consumes, are all declared once in the root `gradle.properties`:
   `production-release` GitHub Environment): validates the tag against `qpmVersion`, checks
   the resolved dependency graph has no SNAPSHOT/dynamic versions
   (`checkNoSnapshotDependencies`), builds the release archive (`releaseArchive`: the shadow
-  jar as `QPM.jar`, the `qpm`/`qpm.bat` launcher scripts, the CycloneDX JSON SBOM, and
+  jar as `QPM.jar`, the `qpm` launcher script, the CycloneDX JSON SBOM, and
   `component-manifest.json`), and creates the GitHub Release with all of it attached
   (archive, raw jar, SBOM, manifest).
 

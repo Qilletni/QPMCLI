@@ -70,7 +70,7 @@ jobs:
           ARCHIVE=$(ls build/distributions/qpm-*.tar.gz)
           tar -tzf "$ARCHIVE" | sort > /tmp/archive-contents.txt
           cat /tmp/archive-contents.txt
-          for entry in QPM.jar qpm qpm.bat qpm-bom.json component-manifest.json; do
+          for entry in QPM.jar qpm qpm-bom.json component-manifest.json; do
             if ! grep -qx "$entry" /tmp/archive-contents.txt; then
               echo "::error::Release archive is missing '$entry'"
               exit 1

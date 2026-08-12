@@ -213,8 +213,8 @@ tasks.register('checkNoSnapshotDependencies') {
 }
 
 // The full executable release archive: the shadow jar (renamed to QPM.jar,
-// matching scripts/qpm and scripts/qpm.bat's expectations), the launcher
-// scripts, the CycloneDX SBOM, and component-manifest.json.
+// matching scripts/qpm's expectations), the launcher script, the CycloneDX
+// SBOM, and component-manifest.json.
 import org.gradle.api.tasks.bundling.Tar
 import org.gradle.api.tasks.bundling.Compression
 
@@ -231,7 +231,7 @@ tasks.register('releaseArchive', Tar) {
         rename { 'QPM.jar' }
     }
     from('scripts') {
-        include 'qpm', 'qpm.bat'
+        include 'qpm'
     }
     from(layout.buildDirectory.file('reports/cyclonedx-direct/bom.json')) {
         rename { 'qpm-bom.json' }
