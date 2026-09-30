@@ -1,0 +1,6 @@
+{
+  "bump": "patch",
+  "component": "qpm",
+  "from_version": "1.0.1-SNAPSHOT",
+  "to_version": "1.0.1"
+}
