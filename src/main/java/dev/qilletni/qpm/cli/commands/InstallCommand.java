@@ -15,7 +15,6 @@ import picocli.CommandLine.Option;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.Callable;
 
@@ -117,11 +116,7 @@ public class InstallCommand implements Callable<Integer> {
      * @throws IOException
      */
     private boolean hasLocalVariant(String scope, String name, String version) throws IOException {
-        var packagesDir = ConfigManager.getLocalPackagesDir();
-        var packageDir = packagesDir.resolve(scope).resolve(name);
-        Files.createDirectories(packageDir);
-
-        var packagePath = packageDir.resolve("%s-%s.qll".formatted(name, version));
+        var packagePath = ConfigManager.getPackageFile(ConfigManager.getLocalPackagesDir(), scope, name, version);
 
         return Files.exists(packagePath);
     }
@@ -149,11 +144,8 @@ public class InstallCommand implements Callable<Integer> {
             }
 
             // Build package path
-            var packagesDir = ConfigManager.getPackagesDir();
-            var packageDir = packagesDir.resolve(scope).resolve(name);
-            Files.createDirectories(packageDir);
-
-            var packagePath = packageDir.resolve("%s-%s.qll".formatted(name, pkg.version()));
+            var packagePath = ConfigManager.getPackageFile(ConfigManager.getPackagesDir(), scope, name, pkg.version());
+            Files.createDirectories(packagePath.getParent());
 
             // Check if already installed and verified
             if (Files.exists(packagePath)) {
@@ -180,7 +172,7 @@ public class InstallCommand implements Callable<Integer> {
             installedCount++;
 
         } catch (IntegrityException | IOException | RegistryException e) {
-            ProgressDisplay.error("✗ " + pkg.name() + "@" + pkg.version() + " - " + e.getMessage());
+            ProgressDisplay.errorDetail("✗ " + pkg.name() + "@" + pkg.version() + " - " + e.getMessage());
         }
     }
 }

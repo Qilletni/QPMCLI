@@ -96,15 +96,15 @@ public class DeleteCommand implements Callable<Integer> {
             // Handle organization-specific errors
             if ("insufficient_permissions".equals(e.getErrorCode())) {
                 ProgressDisplay.error("Cannot verify organization membership.");
-                ProgressDisplay.error("");
-                ProgressDisplay.error("The 'read:org' permission is required to delete organization packages.");
-                ProgressDisplay.error("Please re-authenticate: qpm login");
+                ProgressDisplay.errorDetail("");
+                ProgressDisplay.errorDetail("The 'read:org' permission is required to delete organization packages.");
+                ProgressDisplay.errorDetail("Please re-authenticate: qpm login");
                 return 1;
             } else if ("forbidden".equals(e.getErrorCode())) {
                 // Display the detailed error message from the server
                 // which includes org admin requirements and GitHub links
                 ProgressDisplay.error("Failed to delete package:");
-                ProgressDisplay.error(e.getMessage());
+                ProgressDisplay.errorDetail(e.getMessage());
                 return 1;
             } else {
                 // Generic registry error

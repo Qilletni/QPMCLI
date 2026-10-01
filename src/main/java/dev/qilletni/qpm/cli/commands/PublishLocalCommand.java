@@ -47,11 +47,8 @@ public class PublishLocalCommand implements Callable<Integer> {
 
             ConfigManager.ensurePackagesDir();
 
-            var localPackagesDir = ConfigManager.getLocalPackagesDir();
-            var packageDir = localPackagesDir.resolve(qllInfo.scope()).resolve(qllInfo.name());
-            Files.createDirectories(packageDir);
-
-            var packagePath = packageDir.resolve("%s-%s.qll".formatted(qllInfo.name(), version));
+            var packagePath = ConfigManager.getPackageFile(ConfigManager.getLocalPackagesDir(), qllInfo.scope(), qllInfo.name(), version);
+            Files.createDirectories(packagePath.getParent());
 
             Files.copy(publishingPackagePath, packagePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             ProgressDisplay.success("Local package published successfully!");

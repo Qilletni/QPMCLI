@@ -183,6 +183,19 @@ public class ConfigManager {
     }
 
     /**
+     * Gets the path of a package file within a packages directory ({@code <scope>/<name>/<name>-<version>.qll}).
+     *
+     * @param packagesDir The packages directory, from {@link #getPackagesDir()} or {@link #getLocalPackagesDir()}
+     * @param scope The scope of the package
+     * @param name The name of the package
+     * @param version The version of the package
+     * @return The path to the package file
+     */
+    public static Path getPackageFile(Path packagesDir, String scope, String name, String version) {
+        return packagesDir.resolve(scope).resolve(name).resolve("%s-%s.qll".formatted(name, version));
+    }
+
+    /**
      * Ensures the packages directory exists.
      */
     public static void ensurePackagesDir() throws IOException {

@@ -33,7 +33,7 @@ public class VerifyCommand implements Callable<Integer> {
             Path lockFilePath = Paths.get("qilletni.lock");
             if (!Files.exists(lockFilePath)) {
                 ProgressDisplay.error("Lock file not found: qilletni.lock");
-                ProgressDisplay.error("Run 'qpm install' first to generate the lock file.");
+                ProgressDisplay.errorDetail("Run 'qpm install' first to generate the lock file.");
                 return 1;
             }
 
@@ -89,37 +89,43 @@ public class VerifyCommand implements Callable<Integer> {
      */
     private boolean verifyPackage(ResolvedPackage pkg) {
         try {
-            // Build path to package file
-            Path packagesDir = ConfigManager.getPackagesDir();
             String[] parts = pkg.name().split("/");
-            if (parts.length != 2 || !parts[0].startsWith("@")) {
-                ProgressDisplay.error("✗ " + pkg.name() + "@" + pkg.version() + " - Invalid package name format");
+            if (parts.length != 2) {
+                ProgressDisplay.errorDetail("✗ " + pkg.name() + "@" + pkg.version() + " - Invalid package name format");
                 return false;
             }
 
-            String scope = parts[0]; // Includes @
+            String scope = parts[0];
             String name = parts[1];
-            Path packagePath = packagesDir.resolve(scope).resolve(name).resolve(pkg.version() + ".qll");
+
+            // Locally published packages take precedence during install and aren't from the registry, so their
+            // contents won't match the lock file's integrity hash
+            if (Files.exists(ConfigManager.getPackageFile(ConfigManager.getLocalPackagesDir(), scope, name, pkg.version()))) {
+                ProgressDisplay.success(pkg.name() + "@" + pkg.version() + " (local version, integrity not checked)");
+                return true;
+            }
+
+            Path packagePath = ConfigManager.getPackageFile(ConfigManager.getPackagesDir(), scope, name, pkg.version());
 
             // Check if file exists
             if (!Files.exists(packagePath)) {
-                ProgressDisplay.error("✗ " + pkg.name() + "@" + pkg.version() + " - File not found");
+                ProgressDisplay.errorDetail("✗ " + pkg.name() + "@" + pkg.version() + " - File not found");
                 return false;
             }
 
             // Verify integrity
             IntegrityVerifier.verifyIntegrity(packagePath, pkg.integrity());
 
-            ProgressDisplay.success("✓ " + pkg.name() + "@" + pkg.version());
+            ProgressDisplay.success(pkg.name() + "@" + pkg.version());
             return true;
 
         } catch (IntegrityException e) {
-            ProgressDisplay.error("✗ " + pkg.name() + "@" + pkg.version() + " - Integrity mismatch");
-            ProgressDisplay.error("  Expected: " + e.getExpected());
-            ProgressDisplay.error("  Actual:   " + e.getActual());
+            ProgressDisplay.errorDetail("✗ " + pkg.name() + "@" + pkg.version() + " - Integrity mismatch");
+            ProgressDisplay.errorDetail("  Expected: " + e.getExpected());
+            ProgressDisplay.errorDetail("  Actual:   " + e.getActual());
             return false;
         } catch (Exception e) {
-            ProgressDisplay.error("✗ " + pkg.name() + "@" + pkg.version() + " - " + e.getMessage());
+            ProgressDisplay.errorDetail("✗ " + pkg.name() + "@" + pkg.version() + " - " + e.getMessage());
             return false;
         }
     }

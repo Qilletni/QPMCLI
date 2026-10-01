@@ -4,8 +4,6 @@ import dev.qilletni.qpm.cli.QilletniPackageManagerApplication;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
-
 /**
  * Utility class for displaying progress information to the user with color support.
  */
@@ -14,16 +12,26 @@ public class ProgressDisplay {
     private static final Logger LOGGER = LoggerFactory.getLogger(ProgressDisplay.class);
 
     /**
+     * Formats the message only when args are given, so messages containing a literal '%' (e.g. from
+     * concatenated exception messages) don't throw.
+     */
+    private static String format(String message, Object... args) {
+        return args.length == 0 ? message : message.formatted(args);
+    }
+
+    /**
      * Displays a simple progress message.
      *
      * @param message the message to display
      */
     public static void info(String message, Object... args) {
-        System.out.println(message.formatted(args));
+        var formattedMessage = format(message, args);
+
+        System.out.println(formattedMessage);
 
         // If logger is going to console, don't duplicate this message
         if (!QilletniPackageManagerApplication.isVerbose()) {
-            LOGGER.info(message);
+            LOGGER.info(formattedMessage);
         }
     }
 
@@ -47,8 +55,24 @@ public class ProgressDisplay {
      *
      * @param message the error message
      */
+    public static void errorDetail(String message, Object... args) {
+        var formattedMessage = format(message, args);
+
+        System.err.println(ColorSupport.red(formattedMessage));
+
+        // If logger is going to console, don't duplicate this message
+        if (!QilletniPackageManagerApplication.isVerbose()) {
+            LOGGER.error(formattedMessage);
+        }
+    }
+
+    /**
+     * Displays an error message in red.
+     *
+     * @param message the error message
+     */
     public static void error(String message, Object... args) {
-        var formattedMessage = message.formatted(args);
+        var formattedMessage = format(message, args);
 
         System.err.println(ColorSupport.red("Error:") + " " + formattedMessage);
 
@@ -64,7 +88,7 @@ public class ProgressDisplay {
      * @param message the error message
      */
     public static void error(String message, Throwable e, Object... args) {
-        var formattedMessage = message.formatted(args);
+        var formattedMessage = format(message, args);
 
         System.err.println(ColorSupport.red("Error:") + " " + formattedMessage);
         e.printStackTrace();
@@ -81,11 +105,13 @@ public class ProgressDisplay {
      * @param message the success message
      */
     public static void success(String message, Object... args) {
-        System.out.println(ColorSupport.green("✓") + " " + message.formatted(args));
+        var formattedMessage = format(message, args);
+
+        System.out.println(ColorSupport.green("✓") + " " + formattedMessage);
 
         // If logger is going to console, don't duplicate this message
         if (!QilletniPackageManagerApplication.isVerbose()) {
-            LOGGER.info(message);
+            LOGGER.info(formattedMessage);
         }
     }
 
@@ -95,11 +121,13 @@ public class ProgressDisplay {
      * @param message the warning message
      */
     public static void warn(String message, Object... args) {
-        System.out.println(ColorSupport.yellow("⚠") + " " + message.formatted(args));
+        var formattedMessage = format(message, args);
+
+        System.out.println(ColorSupport.yellow("⚠") + " " + formattedMessage);
 
         // If logger is going to console, don't duplicate this message
         if (!QilletniPackageManagerApplication.isVerbose()) {
-            LOGGER.warn(message);
+            LOGGER.warn(formattedMessage);
         }
     }
 
