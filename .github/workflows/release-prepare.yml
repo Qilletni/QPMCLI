@@ -27,6 +27,8 @@ jobs:
     with:
       component: qpm
       bump: ${{ inputs.bump }}
+      # Runs on the stable version, so the snapshot guard enforces here.
+      test_tasks: "clean test checkNoSnapshotDependencies -PincludeSiblingBuilds=false"
     secrets:
       app-id: ${{ secrets.QILLETNI_RELEASE_APP_ID }}
       app-private-key: ${{ secrets.QILLETNI_RELEASE_APP_PRIVATE_KEY }}

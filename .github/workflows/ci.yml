@@ -114,3 +114,10 @@ jobs:
         uses: reviewdog/action-actionlint@v1
         with:
           fail_level: error
+
+  # Informational: builds against same-named upstream branches via the composite build.
+  linked-build:
+    if: github.event_name == 'pull_request'
+    uses: Qilletni/Qilletni/.github/workflows/reusable-linked-build.yml@master
+    with:
+      upstreams: Qilletni QilletniPackageUtility
