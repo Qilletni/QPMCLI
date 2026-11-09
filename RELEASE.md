@@ -114,6 +114,13 @@ The `Dependency Update` workflow refreshes the lockfile automatically.
 `../QilletniPackageUtility`. The flag is `false` by default. The release workflows and the
 `ci.yml` workflow always build against the published Maven coordinates.
 
+`checkNoSnapshotDependencies` stops only on a stable version. On a `-SNAPSHOT` version, it
+does nothing, so `master` can use a `-SNAPSHOT` version of an upstream component. Use
+`-PenforceReleaseDeps=true` to run the check on a `-SNAPSHOT` version.
+
+For a change that needs this repository and an upstream repository together, refer to
+[Change a component and its consumers together](https://github.com/Qilletni/Qilletni/blob/master/RELEASE.md#change-a-component-and-its-consumers-together).
+
 ## Links
 
 - [Qilletni release document][main]
