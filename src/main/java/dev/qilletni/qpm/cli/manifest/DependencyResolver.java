@@ -2,6 +2,7 @@ package dev.qilletni.qpm.cli.manifest;
 
 import dev.qilletni.pkgutil.manifest.LockFile;
 import dev.qilletni.pkgutil.manifest.models.ResolvedPackage;
+import dev.qilletni.qpm.cli.config.ConfigManager;
 import dev.qilletni.qpm.cli.exceptions.RegistryException;
 import dev.qilletni.qpm.cli.exceptions.ResolutionException;
 import dev.qilletni.qpm.cli.models.*;
@@ -10,6 +11,7 @@ import dev.qilletni.qpm.cli.utils.SemverUtility;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Path;
 import java.util.*;
 
 /**
@@ -20,9 +22,16 @@ public class DependencyResolver {
     private static final Logger logger = LoggerFactory.getLogger(DependencyResolver.class);
 
     private final RegistryClient registryClient;
+    private final LocalPackageIndex localPackageIndex;
+    private final Set<String> localVersionStrings = new HashSet<>();
 
     public DependencyResolver(RegistryClient registryClient) {
+        this(registryClient, ConfigManager.getLocalPackagesDir());
+    }
+
+    public DependencyResolver(RegistryClient registryClient, Path localPackagesDir) {
         this.registryClient = registryClient;
+        this.localPackageIndex = new LocalPackageIndex(localPackagesDir);
     }
 
     /**
@@ -62,14 +71,11 @@ public class DependencyResolver {
                 continue;
             }
 
-            // Fetch package index with all version details
-            PackageVersionList versionList = fetchPackageIndex(packageName);
-            if (versionList.versions().isEmpty()) {
-                throw new ResolutionException("No versions found for package: " + packageName);
-            }
+            // Fetch all available versions (registry + locally published)
+            Map<String, VersionInfo> versionMap = fetchAvailableVersions(packageName);
 
             // Get available version strings
-            List<String> availableVersions = versionList.getVersionStrings();
+            List<String> availableVersions = new ArrayList<>(versionMap.keySet());
 
             // Find best matching version
             Version bestVersion = SemverUtility.findMaxSatisfying(availableVersions, constraint);
@@ -80,10 +86,10 @@ public class DependencyResolver {
                 ));
             }
 
-            logger.info("Resolved {} to version {}", packageName, bestVersion);
-
             // Get the version info from the index (already fetched)
-            VersionInfo versionInfo = versionList.findVersion(bestVersion.toString());
+            VersionInfo versionInfo = versionMap.get(bestVersion.toString());
+            boolean isLocal = versionInfo != null && localVersionStrings.contains(packageName + "@" + bestVersion);
+            logger.info("Resolved {} to version {}{}", packageName, bestVersion, isLocal ? " (local)" : "");
             if (versionInfo == null) {
                 throw new ResolutionException("Version info not found for " + packageName + "@" + bestVersion);
             }
@@ -141,16 +147,37 @@ public class DependencyResolver {
     }
 
     /**
-     * Fetches the package index with all version details from the registry.
-     * This is the optimized approach - single request contains all version info including dependencies.
+     * Fetches every available version of a package, keyed by version string. This combines the registry's package
+     * index with packages published locally via {@code qpm publish-local}, with local copies taking precedence when
+     * the same version exists in both. If local versions exist, a registry failure is tolerated so local-only
+     * packages can still be resolved.
      */
-    private PackageVersionList fetchPackageIndex(String packageName) throws ResolutionException {
-        try {
-            var packageNameScope = RegistryClient.parsePackageName(packageName);
+    private Map<String, VersionInfo> fetchAvailableVersions(String packageName) throws ResolutionException {
+        var packageNameScope = RegistryClient.parsePackageName(packageName);
+        var localVersions = localPackageIndex.getVersions(packageNameScope.scope(), packageNameScope.name());
 
-            return registryClient.getPackageVersions(packageNameScope.scope(), packageNameScope.name());
+        Map<String, VersionInfo> versionMap = new LinkedHashMap<>();
+
+        try {
+            PackageVersionList versionList = registryClient.getPackageVersions(packageNameScope.scope(), packageNameScope.name());
+            versionList.versions().forEach(versionInfo -> versionMap.put(versionInfo.version(), versionInfo));
         } catch (RegistryException e) {
-            throw new ResolutionException("Failed to fetch package index for " + packageName, e);
+            if (localVersions.isEmpty()) {
+                throw new ResolutionException("Failed to fetch package index for " + packageName, e);
+            }
+
+            logger.warn("Failed to fetch registry index for {}, using local versions only: {}", packageName, e.getMessage());
         }
+
+        for (VersionInfo localVersion : localVersions) {
+            versionMap.put(localVersion.version(), localVersion);
+            localVersionStrings.add(packageName + "@" + localVersion.version());
+        }
+
+        if (versionMap.isEmpty()) {
+            throw new ResolutionException("No versions found for package: " + packageName);
+        }
+
+        return versionMap;
     }
 }
