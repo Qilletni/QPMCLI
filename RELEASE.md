@@ -111,8 +111,11 @@ The `Dependency Update` workflow refreshes the lockfile automatically.
 ## Local development
 
 `-PincludeSiblingBuilds=true` builds against the sibling checkouts `../Qilletni` and
-`../QilletniPackageUtility`. The flag is `false` by default. The release workflows and the
-`ci.yml` workflow always build against the published Maven coordinates.
+`../QilletniPackageUtility`. The flag is `false` by default. The release workflows always
+use published Maven coordinates. In `ci.yml`, pull requests eligible for linking use
+same-named upstream branches when available; the lock, stable-dependency and
+release-artifact checks run only when no upstream is linked. Push builds do not link
+upstream branches.
 
 `checkNoSnapshotDependencies` stops only on a stable version. On a `-SNAPSHOT` version, it
 does nothing, so `master` can use a `-SNAPSHOT` version of an upstream component. Use
