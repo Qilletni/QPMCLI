@@ -168,7 +168,6 @@ jobs:
         with:
           java-version: '27'
           distribution: 'temurin'
-          cache: 'gradle'
 
       - uses: gradle/actions/setup-gradle@v5
 
@@ -276,7 +275,6 @@ jobs:
         with:
           java-version: '27'
           distribution: 'temurin'
-          cache: 'gradle'
 
       - uses: gradle/actions/setup-gradle@v5
 
